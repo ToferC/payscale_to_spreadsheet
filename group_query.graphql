@@ -1,4 +1,4 @@
-query GroupQuery(
+query Query(
   $identifier1:GroupID!,
   $level: Int!, 
   $step:Int!,

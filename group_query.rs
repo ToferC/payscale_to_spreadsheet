@@ -1,8 +1,8 @@
-pub struct GroupQuery;
-pub mod group_query {
+pub struct Query;
+pub mod query {
     #![allow(dead_code)]
-    pub const OPERATION_NAME: &'static str = "GroupQuery";
-    pub const QUERY : & 'static str = "query GroupQuery(\n  $identifier1:GroupID!,\n  $level: Int!, \n  $step:Int!,\n\t$startDate: NaiveDate!,\n\t$endDate:NaiveDate!) {\n  group(identifier: $identifier1) {\n    payscaleForLevel(level:$level) {\n      steps\n    }\n    identifier\n    payAtLevelAndStepBetweenDates(\n    \tlevel: $level\n      step: $step\n      startDate:$startDate\n      endDate:$endDate\n    ){\n      startDate\n      endDate\n      workDays\n      workHours\n      hourlyRate\n      annualRate\n      salary\n    }\n  }\n}" ;
+    pub const OPERATION_NAME: &'static str = "Query";
+    pub const QUERY : & 'static str = "query Query(\n  $identifier1:GroupID!,\n  $level: Int!, \n  $step:Int!,\n\t$startDate: NaiveDate!,\n\t$endDate:NaiveDate!) {\n  group(identifier: $identifier1) {\n    payscaleForLevel(level:$level) {\n      steps\n    }\n    identifier\n    payAtLevelAndStepBetweenDates(\n    \tlevel: $level\n      step: $step\n      startDate:$startDate\n      endDate:$endDate\n    ){\n      startDate\n      endDate\n      workDays\n      workHours\n      hourlyRate\n      annualRate\n      salary\n    }\n  }\n}" ;
     use serde::{Deserialize, Serialize};
     #[allow(dead_code)]
     type Boolean = bool;
@@ -12,11 +12,9 @@ pub mod group_query {
     type Int = i64;
     #[allow(dead_code)]
     type ID = String;
-    #[doc = "NaiveDate"]
     type NaiveDate = super::NaiveDate;
-    #[derive(Eq, PartialEq)]
+    #[derive(Eq, PartialEq, Copy, Clone)]
     pub enum GroupID {
-        #[doc = "GroupID represents a two-letter identifier for a pay group as an enum"]
         CS,
         CX,
         DS,
@@ -155,47 +153,33 @@ pub mod group_query {
         }
     }
     #[derive(Deserialize)]
-    #[doc = "A payscale containing a specific level and agreed pay rates for a period of time and pay steps.\nThis would contain all data for an EC-04, for example, including the changes to pay according to the collective agreeement\nand the annual pay steps within the specific agreement.\nOf note, many payScales are behind the current date and/or are being negotiated at any point in time."]
-    pub struct GroupQueryGroupPayscaleForLevel {
-        #[doc = "The number of steps in a payscale - e.g., there are 5 steps in the EC-04 payscale"]
+    pub struct QueryGroupPayscaleForLevel {
         pub steps: Int,
     }
     #[derive(Deserialize)]
-    #[doc = "IMPORTANT: IN TESTING\nA Pay Period represents a series of time periods and the approximate gross pay expect in each period\nIt is based on the pay rate in force for the dates in question at a current level and step.\nIf you want to track different steps, you will need to run multiple instances of PayAtLevelAndStepBetweenDates\nin your query."]
-    pub struct GroupQueryGroupPayAtLevelAndStepBetweenDates {
-        #[doc = "The start date for a pay period in YYYY-MM-DD."]
+    pub struct QueryGroupPayAtLevelAndStepBetweenDates {
         #[serde(rename = "startDate")]
         pub start_date: NaiveDate,
-        #[doc = "The end date for a pay period in YYYY-MM-DD."]
         #[serde(rename = "endDate")]
         pub end_date: NaiveDate,
-        #[doc = "The duration in days for a pay period."]
         #[serde(rename = "workDays")]
         pub work_days: Float,
-        #[doc = "The duration in hours for a pay period."]
         #[serde(rename = "workHours")]
         pub work_hours: Float,
-        #[doc = "The hourly pay rate for a pay period."]
         #[serde(rename = "hourlyRate")]
         pub hourly_rate: Float,
-        #[doc = "The annual pay rate for a pay period."]
         #[serde(rename = "annualRate")]
         pub annual_rate: Float,
-        #[doc = "The gross salary (approximate) for a pay period"]
         pub salary: Option<Float>,
     }
     #[derive(Deserialize)]
-    #[doc = "A pay group as defined by a collective agreement"]
-    pub struct GroupQueryGroup {
-        #[doc = "Returns a payscale for a specific level within the group."]
+    pub struct QueryGroup {
         #[serde(rename = "payscaleForLevel")]
-        pub payscale_for_level: Option<GroupQueryGroupPayscaleForLevel>,
-        #[doc = "The two-letter identifier for the group as an enum."]
+        pub payscale_for_level: Option<QueryGroupPayscaleForLevel>,
         pub identifier: GroupID,
-        #[doc = "Returns a vector of PayPeriods representing the expected pay for a range of work days inclusive of two YYYY-MM-DD dates.\nFor example, start_date: \"2020-05-01\" and end_date: \"2020-05-05\" would return pay for 1 day of 7.5 hours.\nThe function returns work days and holidays (for which public servants receive pay), but not weekends.\nAlso requires a level and step in integers to compute the requested pay."]
         #[serde(rename = "payAtLevelAndStepBetweenDates")]
         pub pay_at_level_and_step_between_dates:
-            Option<Vec<GroupQueryGroupPayAtLevelAndStepBetweenDates>>,
+            Option<Vec<QueryGroupPayAtLevelAndStepBetweenDates>>,
     }
     #[derive(Serialize)]
     pub struct Variables {
@@ -210,17 +194,17 @@ pub mod group_query {
     impl Variables {}
     #[derive(Deserialize)]
     pub struct ResponseData {
-        pub group: GroupQueryGroup,
+        pub group: QueryGroup,
     }
 }
-impl graphql_client::GraphQLQuery for GroupQuery {
-    type Variables = group_query::Variables;
-    type ResponseData = group_query::ResponseData;
+impl graphql_client::GraphQLQuery for Query {
+    type Variables = query::Variables;
+    type ResponseData = query::ResponseData;
     fn build_query(variables: Self::Variables) -> ::graphql_client::QueryBody<Self::Variables> {
         graphql_client::QueryBody {
             variables,
-            query: group_query::QUERY,
-            operation_name: group_query::OPERATION_NAME,
+            query: query::QUERY,
+            operation_name: query::OPERATION_NAME,
         }
     }
 }
