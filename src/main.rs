@@ -2,10 +2,11 @@ use calamine::{open_workbook, Xlsx, Reader, RangeDeserializerBuilder, Ods};
 use chrono::prelude::*;
 use graphql_client::{GraphQLQuery, Response};
 use simple_excel_writer::*;
+use csv::Writer;
+use serde::{Serialize};
 
 use std::error::Error;
 use std::env;
-use std::sync::Arc;
 
 #[derive(GraphQLQuery)]
 #[graphql(
@@ -15,6 +16,7 @@ use std::sync::Arc;
 )]
 pub struct Query;
 
+#[derive(Serialize)]
 pub struct WBColumn {
     last_name: String,
     first_name:  String,
@@ -97,45 +99,38 @@ fn main() -> Result<(), calamine::Error> {
     let args: Vec<String> = env::args().collect();
 
     //let path = "./workbooks/test.ods";
-    let path = &args[1];
-    let filename = &args[2];
+    let open_path = &args[1];
+    let save_path = &args[2];
 
-    println!("{}", path);
+    println!("{}", open_path);
     
-    let extension: Vec<&str> = path.split(".").collect();
-    let extension: &str = extension[2];
-    println!("path: {}", path);
+    let open_extension: Vec<&str> = open_path.split(".").collect();
+    let open_extension: &str = open_extension[2];
+    println!("path: {}", open_path);
 
-    println!("extension: {}", extension);
+    println!("extension: {}", open_extension);
 
     let mut range: calamine::Range<calamine::DataType> = calamine::Range::default();
 
-    match extension {
+    match open_extension {
         "ods" => {
-            let mut workbook: Ods<_> = open_workbook(path)?;
+            let mut workbook: Ods<_> = open_workbook(open_path)?;
             range = workbook.worksheet_range("Sheet1")
                 .ok_or(calamine::Error::Msg("Cannot find sheet"))??;
         }
         "xlsx" => {
-            let mut workbook: Xlsx<_> = open_workbook(path)?;
+            let mut workbook: Xlsx<_> = open_workbook(open_path)?;
             range = workbook.worksheet_range("Sheet1")
                 .ok_or(calamine::Error::Msg("Cannot find sheet"))??;
         }
         _ => println!("Not a valid workbook or format.")
     }
 
-    
+    let save_extension: Vec<&str> = save_path.split(".").collect();
+    let save_extension: &str = save_extension[1];
+
     // create iterator over input workbook rows
     let iter = RangeDeserializerBuilder::new().from_range(&range)?;
-    
-    // create new workbook
-    let mut wb = Workbook::create(format!("./workbooks/{}", filename).as_str());
-    let mut sheet = wb.create_sheet("PayUpdate");
-
-    // set column width
-    for _ in 0..12 {
-        sheet.add_column(Column { width: 10.0 });
-    }
 
     let mut data_vec = Vec::new();
 
@@ -181,21 +176,44 @@ fn main() -> Result<(), calamine::Error> {
 
     }
 
-    wb.write_sheet(&mut sheet, |sheet_writer| {
-        let sw = sheet_writer;
-        sw.append_row(row!["last_name", "first_name", "group", "level", "step",
-            "start_date", "end_date", "work_hours", "work_days", "hourly_rate",
-            "annual_rate", "salary"])?;
+    match save_extension {
+        "xlsx" => {
+            // create new workbook
+            let mut wb = Workbook::create(format!("./workbooks/{}", save_path).as_str());
+            let mut sheet = wb.create_sheet("PayUpdate");
 
-        for e in data_vec {
-            sw.append_row(row![e.last_name.as_str(), e.first_name.as_str(), e.group.as_str(), e.level as f64, e.step as f64,
-                e.start_date, e.end_date, e.work_hours, e.work_days, e.hourly_rate,
-                e.annual_rate, e.salary]).unwrap();
+            // set column width
+            for _ in 0..12 {
+                sheet.add_column(Column { width: 10.0 });
+            }
+
+            wb.write_sheet(&mut sheet, |sheet_writer| {
+                let sw = sheet_writer;
+                sw.append_row(row!["last_name", "first_name", "group", "level", "step",
+                    "start_date", "end_date", "work_hours", "work_days", "hourly_rate",
+                    "annual_rate", "salary"])?;
+        
+                for e in data_vec {
+                    sw.append_row(row![e.last_name.as_str(), e.first_name.as_str(), e.group.as_str(), e.level as f64, e.step as f64,
+                        e.start_date, e.end_date, e.work_hours, e.work_days, e.hourly_rate,
+                        e.annual_rate, e.salary]).unwrap();
+                }
+                Ok(())
+
+            }).expect("write excel error!");
+        
+            wb.close().expect("close excel error!");
         }
-        Ok(())
-    }).expect("write excel error!");
+        "csv" => {
+            let mut wtr = Writer::from_path(format!("./workbooks/{}", save_path)).unwrap();
 
-    wb.close().expect("close excel error!");
+            for e in data_vec {
+                wtr.serialize(e).unwrap();
+            }
+            wtr.flush()?;
+        }
+        _ => println!("Not a valid file extension.")
+    }
 
     Ok(())
 }
