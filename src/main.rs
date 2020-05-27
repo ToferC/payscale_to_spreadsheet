@@ -86,7 +86,7 @@ pub fn pay_query(
         let start = period.start_date.format("%Y-%m-%d").to_string();
         let end = period.end_date.format("%Y-%m-%d").to_string();
     
-        response_vec.push((start, end, period.work_days, period.work_hours, period.hourly_rate,
+        response_vec.push((start, end, period.work_hours, period.work_days, period.hourly_rate,
             period.annual_rate, salary));
     
         }
