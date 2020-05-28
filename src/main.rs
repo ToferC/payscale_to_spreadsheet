@@ -3,10 +3,13 @@ use chrono::prelude::*;
 use graphql_client::{GraphQLQuery, Response};
 use simple_excel_writer::*;
 use csv::Writer;
-use serde::{Serialize};
+use serde::{Serialize, Deserialize};
+use structopt::StructOpt;
 
 use std::error::Error;
 use std::env;
+use std::io;
+use std::path::PathBuf;
 
 #[derive(GraphQLQuery)]
 #[graphql(
@@ -15,6 +18,25 @@ use std::env;
     response_derives = "Debug"
 )]
 pub struct Query;
+
+#[derive(StructOpt, Debug)]
+struct Opt {
+    #[structopt(parse(from_os_str))]
+    open_path: PathBuf,
+    #[structopt(parse(from_os_str))]
+    save_path: PathBuf,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Record {
+    last_name: String,
+    first_name: String,
+    group: query::GroupID, 
+    level: i64, 
+    step: i64, 
+    start_date: NaiveDate, 
+    end_date: NaiveDate,
+}
 
 #[derive(Serialize)]
 pub struct WBColumn {
@@ -96,56 +118,55 @@ pub fn pay_query(
 
 fn main() -> Result<(), calamine::Error> {
 
-    let args: Vec<String> = env::args().collect();
+    let args = Opt::from_args();
 
-    //let path = "./workbooks/test.ods";
-    let open_path = &args[1];
-    let save_path = &args[2];
-
-    println!("{}", open_path);
+    println!("{:?}", args.open_path);
     
-    let open_extension: Vec<&str> = open_path.split(".").collect();
-    let open_extension: &str = open_extension[2];
-    println!("path: {}", open_path);
-
-    println!("extension: {}", open_extension);
-
+    let open_extension = args.open_path.extension().expect("Unknown extension for target file.");    
+    
     let mut range: calamine::Range<calamine::DataType> = calamine::Range::default();
-
-    match open_extension {
+    let mut csv_iter = Vec::new();
+    
+    match open_extension.to_str().unwrap() {
         "ods" => {
-            let mut workbook: Ods<_> = open_workbook(open_path)?;
+            let mut workbook: Ods<_> = open_workbook(&args.open_path)?;
             range = workbook.worksheet_range("Sheet1")
-                .ok_or(calamine::Error::Msg("Cannot find sheet"))??;
+            .ok_or(calamine::Error::Msg("Cannot find sheet"))??;
         }
         "xlsx" => {
-            let mut workbook: Xlsx<_> = open_workbook(open_path)?;
+            let mut workbook: Xlsx<_> = open_workbook(&args.open_path)?;
             range = workbook.worksheet_range("Sheet1")
-                .ok_or(calamine::Error::Msg("Cannot find sheet"))??;
+            .ok_or(calamine::Error::Msg("Cannot find sheet"))??;
+        }
+        "csv" => {
+            let mut rdr = csv::Reader::from_path(&args.open_path).expect("Unable to open CSV");
+            for result in rdr.deserialize() {
+                let record: Record = result.unwrap();
+                csv_iter.push(record);
+            }
         }
         _ => println!("Not a valid workbook or format.")
     }
-
-    let save_extension: Vec<&str> = save_path.split(".").collect();
-    let save_extension: &str = save_extension[1];
-
-    // create iterator over input workbook rows
-    let iter = RangeDeserializerBuilder::new().from_range(&range)?;
-
+    
+    
     let mut data_vec = Vec::new();
+    
+    if open_extension == "xlsx" || open_extension == "ods" {
+        // create iterator over input workbook rows
+        let iter = RangeDeserializerBuilder::new().from_range(&range)?;
 
-    // iterate over input workbook rows
-    for result in iter {
-        let (
-            last_name,
-            first_name, 
-            group, 
-            level, 
-            step, 
-            start_date, 
-            end_date): (String, String, query::GroupID, i64, i64, NaiveDate, NaiveDate) = result?;
-            //println!("{} {} {:?} {} {} {} {}", last_name, first_name, group, level, step, start_date, end_date);
-
+        // iterate over input workbook rows
+        for result in iter {
+            let (
+                last_name,
+                first_name, 
+                group, 
+                level, 
+                step, 
+                start_date, 
+                end_date): (String, String, query::GroupID, i64, i64, NaiveDate, NaiveDate) = result?;
+                //println!("{} {} {:?} {} {} {} {}", last_name, first_name, group, level, step, start_date, end_date);
+    
             let group_str: String;
             
             {
@@ -173,13 +194,48 @@ fn main() -> Result<(), calamine::Error> {
                     salary: salary,
                 })
             }
+        }
+    } else if open_extension == "csv" {
 
-    }
+        for r in csv_iter {
 
-    match save_extension {
+            let group_str: String;
+            
+            {
+                group_str = format!("{:?}", &r.group);
+            }
+
+            let response_data = pay_query(r.group, r.level, r.step, r.start_date, r.end_date).expect("Error on Graphql query");
+    
+            for period in response_data {
+                
+                let (start, end, work_hours, work_days, hourly_rate, annual_rate, salary) = period;
+    
+                data_vec.push(WBColumn {
+                    last_name: r.last_name.clone(),
+                    first_name:  r.first_name.clone(),
+                    group: group_str.clone(),
+                    level: r.level,
+                    step: r.step,
+                    start_date:  start,
+                    end_date: end,
+                    work_hours: work_hours,
+                    work_days: work_days,
+                    hourly_rate: hourly_rate,
+                    annual_rate: annual_rate,
+                    salary: salary,
+                })
+            }
+        }
+        }
+
+
+    let save_extension = args.open_path.extension().expect("Unknown extension for target file.");    
+
+    match save_extension.to_str().unwrap() {
         "xlsx" => {
             // create new workbook
-            let mut wb = Workbook::create(format!("./workbooks/{}", save_path).as_str());
+            let mut wb = Workbook::create(args.save_path.to_str().unwrap());
             let mut sheet = wb.create_sheet("PayUpdate");
 
             // set column width
@@ -205,7 +261,7 @@ fn main() -> Result<(), calamine::Error> {
             wb.close().expect("close excel error!");
         }
         "csv" => {
-            let mut wtr = Writer::from_path(format!("./workbooks/{}", save_path)).unwrap();
+            let mut wtr = Writer::from_path(args.save_path).unwrap();
 
             for e in data_vec {
                 wtr.serialize(e).unwrap();
