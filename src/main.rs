@@ -7,8 +7,6 @@ use serde::{Serialize, Deserialize};
 use structopt::StructOpt;
 
 use std::error::Error;
-use std::env;
-use std::io;
 use std::path::PathBuf;
 
 #[derive(GraphQLQuery)]
